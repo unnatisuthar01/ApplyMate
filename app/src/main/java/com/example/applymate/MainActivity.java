@@ -14,6 +14,7 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import com.example.applymate.database.DatabaseHelper;
 import com.example.applymate.models.JobApplication;
+import com.example.applymate.models.Reminder;
 import com.example.applymate.models.User;
 import com.example.applymate.utils.SessionManager;
 import com.google.android.material.card.MaterialCardView;
@@ -28,6 +29,8 @@ public class MainActivity extends AppCompatActivity {
     private TextView totalCount;
     private LinearLayout recentContainer;
     private TextView emptyRecent;
+    private LinearLayout upcomingReminderContainer;
+    private TextView emptyUpcomingReminders;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -44,6 +47,8 @@ public class MainActivity extends AppCompatActivity {
         totalCount = findViewById(R.id.count_total);
         recentContainer = findViewById(R.id.recent_applications_container);
         emptyRecent = findViewById(R.id.text_recent_empty);
+        upcomingReminderContainer = findViewById(R.id.upcoming_reminders_container);
+        emptyUpcomingReminders = findViewById(R.id.text_upcoming_reminders_empty);
 
         Button addButton = findViewById(R.id.button_add_application);
         Button logoutButton = findViewById(R.id.button_logout);
@@ -57,6 +62,10 @@ public class MainActivity extends AppCompatActivity {
             startActivity(welcomeIntent);
             finish();
         });
+        findViewById(R.id.button_add_reminder).setOnClickListener(
+                view -> startActivity(new Intent(this, AddEditReminderActivity.class)));
+        findViewById(R.id.button_view_all_reminders).setOnClickListener(
+                view -> openReminders());
 
         MaterialCardView totalCard = findViewById(R.id.card_total);
         totalCard.setOnClickListener(view -> openApplications(null));
@@ -64,6 +73,7 @@ public class MainActivity extends AppCompatActivity {
                 view -> openApplications(null));
         bindStatusCard(R.id.card_saved, "Saved", R.string.status_saved);
         bindStatusCard(R.id.card_applied, "Applied", R.string.status_applied);
+        bindStatusCard(R.id.card_pending, "Pending", R.string.status_pending);
         bindStatusCard(R.id.card_interview, "Interview", R.string.status_interview);
         bindStatusCard(R.id.card_selected, "Selected", R.string.status_selected);
         bindStatusCard(R.id.card_rejected, "Rejected", R.string.status_rejected);
@@ -97,10 +107,12 @@ public class MainActivity extends AppCompatActivity {
             totalCount.setText(String.valueOf(counts.get("Total")));
             setStatusCount(R.id.card_saved, counts.get("Saved"));
             setStatusCount(R.id.card_applied, counts.get("Applied"));
+            setStatusCount(R.id.card_pending, counts.get("Pending"));
             setStatusCount(R.id.card_interview, counts.get("Interview"));
             setStatusCount(R.id.card_selected, counts.get("Selected"));
             setStatusCount(R.id.card_rejected, counts.get("Rejected"));
             showRecentApplications(database.getJobApplications(userId, null, 5));
+            showUpcomingReminders(database.getUpcomingReminders(userId, 3));
         } catch (SQLiteException exception) {
             Toast.makeText(this, R.string.database_error, Toast.LENGTH_LONG).show();
         }
@@ -128,6 +140,26 @@ public class MainActivity extends AppCompatActivity {
             row.setOnClickListener(view -> openJobDetails(application.getId()));
             recentContainer.addView(row);
         }
+    }
+
+    private void showUpcomingReminders(List<Reminder> reminders) {
+        upcomingReminderContainer.removeAllViews();
+        emptyUpcomingReminders.setVisibility(reminders.isEmpty() ? View.VISIBLE : View.GONE);
+        LayoutInflater inflater = LayoutInflater.from(this);
+        for (Reminder reminder : reminders) {
+            View row = inflater.inflate(R.layout.item_reminder_summary,
+                    upcomingReminderContainer, false);
+            ((TextView) row.findViewById(R.id.text_reminder_summary_title))
+                    .setText(reminder.getTitle());
+            ((TextView) row.findViewById(R.id.text_reminder_summary_time))
+                    .setText(getString(R.string.reminder_date_time,
+                            JobForm.formatDate(reminder.getDate()), reminder.getTime()));
+            upcomingReminderContainer.addView(row);
+        }
+    }
+
+    private void openReminders() {
+        startActivity(new Intent(this, ReminderActivity.class));
     }
 
     private void openApplications(String status) {

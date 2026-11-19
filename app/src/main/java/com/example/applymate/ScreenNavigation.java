@@ -32,9 +32,13 @@ final class ScreenNavigation {
         TextView profile = activity.findViewById(R.id.nav_profile);
 
         home.setTextColor(activity.getColor(
-                applicationsSelected ? R.color.secondary_text : R.color.primary_blue));
+                activity instanceof MainActivity
+                        ? R.color.primary_blue : R.color.secondary_text));
         applications.setTextColor(activity.getColor(
                 applicationsSelected ? R.color.primary_blue : R.color.secondary_text));
+        statistics.setTextColor(activity.getColor(
+                activity instanceof StatisticsActivity
+                        ? R.color.primary_blue : R.color.secondary_text));
         home.setOnClickListener(view -> {
             if (!(activity instanceof MainActivity)) {
                 Intent intent = new Intent(activity, MainActivity.class);
@@ -52,12 +56,20 @@ final class ScreenNavigation {
                 activity.finish();
             }
         });
+        statistics.setOnClickListener(view -> {
+            if (!(activity instanceof StatisticsActivity)) {
+                Intent intent = new Intent(activity, StatisticsActivity.class);
+                intent.addFlags(
+                        Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                activity.startActivity(intent);
+                activity.finish();
+            }
+        });
         View.OnClickListener placeholderClick = view -> Toast.makeText(
                 activity,
                 activity.getString(R.string.placeholder_coming_soon,
                         ((TextView) view).getText()),
                 Toast.LENGTH_SHORT).show();
-        statistics.setOnClickListener(placeholderClick);
         profile.setOnClickListener(placeholderClick);
     }
 }

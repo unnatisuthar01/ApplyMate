@@ -3,6 +3,9 @@ package com.example.applymate;
 import android.content.Context;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
+import android.app.AlarmManager;
+import android.app.PendingIntent;
+import android.content.Intent;
 import android.view.View;
 import android.widget.Spinner;
 import android.widget.TextView;
@@ -18,10 +21,12 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.applymate.database.DatabaseHelper;
 import com.example.applymate.models.JobApplication;
+import com.example.applymate.models.Reminder;
 import com.example.applymate.models.User;
 import com.example.applymate.utils.PasswordHasher;
 import com.example.applymate.utils.SessionManager;
 import com.google.android.material.chip.ChipGroup;
+import com.google.android.material.card.MaterialCardView;
 import com.google.android.material.textfield.TextInputEditText;
 
 import org.junit.Before;
@@ -238,7 +243,7 @@ public class ExampleInstrumentedTest {
 
         try (DatabaseHelper database = new DatabaseHelper(context)) {
             SQLiteDatabase upgraded = database.getReadableDatabase();
-            assertEquals(2, upgraded.getVersion());
+            assertEquals(3, upgraded.getVersion());
             User migratedUser = database.findUserByEmail("taylor@example.com");
             assertNotNull(migratedUser);
             assertTrue(PasswordHasher.verifyAndClear(
@@ -249,8 +254,8 @@ public class ExampleInstrumentedTest {
                     "id", "user_id", "company_name", "job_role", "location", "job_type",
                     "salary", "application_date", "status", "description", "job_link", "notes");
             assertTableColumns(upgraded, "reminders",
-                    "id", "job_id", "reminder_title", "reminder_date",
-                    "reminder_time", "reminder_type");
+                    "id", "user_id", "job_id", "reminder_title", "description",
+                    "reminder_date", "reminder_time", "reminder_type", "status");
             try (Cursor job = upgraded.query(
                     "job_applications",
                     new String[]{"job_role", "job_type", "application_date", "job_link"},
@@ -265,15 +270,170 @@ public class ExampleInstrumentedTest {
             }
             try (Cursor reminder = upgraded.query(
                     "reminders",
-                    new String[]{"job_id", "reminder_title", "reminder_date"},
+                    new String[]{"user_id", "job_id", "reminder_title", "reminder_date",
+                            "status"},
                     "id = ?",
                     new String[]{"9"},
                     null, null, null)) {
                 assertTrue(reminder.moveToFirst());
-                assertEquals(7, reminder.getLong(0));
-                assertEquals("Interview prep", reminder.getString(1));
-                assertEquals(1700000001000L, reminder.getLong(2));
+                assertEquals(1, reminder.getLong(0));
+                assertEquals(7, reminder.getLong(1));
+                assertEquals("Interview prep", reminder.getString(2));
+                assertEquals(1700000001000L, reminder.getLong(3));
+                assertEquals("Upcoming", reminder.getString(4));
             }
+        }
+    }
+
+    @Test
+    public void reminderCrudAndStatisticsAreScopedToTheCurrentUser() {
+        long firstUserId;
+        long secondUserId;
+        long futureReminderDate;
+        long pastReminderDate;
+        java.util.Calendar futureDate = java.util.Calendar.getInstance();
+        futureDate.add(java.util.Calendar.DAY_OF_MONTH, 2);
+        futureDate.set(java.util.Calendar.HOUR_OF_DAY, 0);
+        futureDate.set(java.util.Calendar.MINUTE, 0);
+        futureDate.set(java.util.Calendar.SECOND, 0);
+        futureDate.set(java.util.Calendar.MILLISECOND, 0);
+        futureReminderDate = futureDate.getTimeInMillis();
+        java.util.Calendar pastDate = java.util.Calendar.getInstance();
+        pastDate.add(java.util.Calendar.DAY_OF_MONTH, -2);
+        pastDate.set(java.util.Calendar.HOUR_OF_DAY, 0);
+        pastDate.set(java.util.Calendar.MINUTE, 0);
+        pastDate.set(java.util.Calendar.SECOND, 0);
+        pastDate.set(java.util.Calendar.MILLISECOND, 0);
+        pastReminderDate = pastDate.getTimeInMillis();
+
+        try (DatabaseHelper database = new DatabaseHelper(context)) {
+            firstUserId = database.insertUser(
+                    "First Applicant", "first@example.com", "", "hash");
+            secondUserId = database.insertUser(
+                    "Second Applicant", "second@example.com", "", "hash");
+            database.insertJobApplication(jobAt(
+                    firstUserId, "A", "Engineer", "Applied",
+                    System.currentTimeMillis()));
+            database.insertJobApplication(jobAt(
+                    firstUserId, "B", "Designer", "Pending",
+                    System.currentTimeMillis()));
+            database.insertJobApplication(jobAt(
+                    firstUserId, "C", "Researcher", "Interview",
+                    System.currentTimeMillis()));
+            database.insertJobApplication(jobAt(
+                    secondUserId, "Private", "Engineer", "Selected",
+                    System.currentTimeMillis()));
+
+            assertEquals(3, database.getApplicationCounts(firstUserId).get("Total").intValue());
+            assertEquals(1, database.getApplicationCounts(firstUserId).get("Pending").intValue());
+            assertEquals(3, database.getMonthlyApplicationCounts(firstUserId, 6)[5]);
+            assertEquals(1, database.getMonthlyApplicationCounts(secondUserId, 6)[5]);
+
+            long reminderId = database.insertReminder(new com.example.applymate.models.Reminder(
+                    0, firstUserId, null, "Interview preparation", "Review notes",
+                    "Job interview", futureReminderDate, "10:30", "Upcoming"));
+            database.insertReminder(new com.example.applymate.models.Reminder(
+                    0, secondUserId, null, "Private follow-up", "",
+                    "Application follow-up", futureReminderDate, "11:00", "Upcoming"));
+            long pastId = database.insertReminder(new com.example.applymate.models.Reminder(
+                    0, firstUserId, null, "Past HR contact", "",
+                    "HR contact", pastReminderDate, "10:00", "Upcoming"));
+
+            assertEquals(1, database.getRemindersForUser(firstUserId, "Upcoming").size());
+            assertEquals(1, database.getRemindersForUser(firstUserId, "Past").size());
+            assertEquals(2, database.getRemindersForUser(firstUserId, null).size());
+            assertEquals(null, database.getReminder(reminderId, secondUserId));
+            assertNotNull(database.getReminder(reminderId, firstUserId));
+            assertTrue(database.setReminderStatus(reminderId, firstUserId, "Completed"));
+            assertEquals(1, database.getRemindersForUser(firstUserId, "Completed").size());
+            assertTrue(database.deleteReminder(pastId, firstUserId));
+            assertFalse(database.deleteReminder(reminderId, secondUserId));
+        }
+    }
+
+    @Test
+    public void reminderFormSavesDateAndTimeAndSchedulesAlarm() {
+        long userId;
+        try (DatabaseHelper database = new DatabaseHelper(context)) {
+            userId = database.insertUser(
+                    "Taylor Applicant", "taylor@example.com", "5551234567", "test-hash");
+        }
+        new SessionManager(context).createSession(userId);
+
+        try (ActivityScenario<AddEditReminderActivity> scenario =
+                     ActivityScenario.launch(AddEditReminderActivity.class)) {
+            scenario.onActivity(activity -> {
+                ((TextView) activity.findViewById(R.id.input_reminder_title))
+                        .setText("Interview preparation");
+                ((TextView) activity.findViewById(R.id.input_reminder_description))
+                        .setText("Review notes");
+                ((Spinner) activity.findViewById(R.id.spinner_reminder_type)).setSelection(1);
+                assertTrue(((TextView) activity.findViewById(R.id.input_reminder_date))
+                        .getText().length() > 0);
+                assertTrue(((TextView) activity.findViewById(R.id.input_reminder_time))
+                        .getText().length() > 0);
+                activity.findViewById(R.id.button_save_reminder).performClick();
+            });
+        }
+
+        Reminder reminder;
+        try (DatabaseHelper database = new DatabaseHelper(context)) {
+            java.util.List<com.example.applymate.models.Reminder> reminders =
+                    database.getRemindersForUser(userId, null);
+            assertEquals(1, reminders.size());
+            reminder = reminders.get(0);
+            assertEquals("Interview preparation", reminder.getTitle());
+            assertEquals("Job interview", reminder.getType());
+            assertNotNull(reminder.getTime());
+        }
+
+        Intent alarmIntent = new Intent(context, ReminderReceiver.class)
+                .setAction(ReminderScheduler.ACTION_REMINDER);
+        int requestCode = (int) (reminder.getId() ^ (reminder.getId() >>> 32));
+        PendingIntent alarm = PendingIntent.getBroadcast(
+                context, requestCode, alarmIntent,
+                PendingIntent.FLAG_NO_CREATE | PendingIntent.FLAG_IMMUTABLE);
+        assertNotNull(alarm);
+        AlarmManager alarmManager =
+                (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+        alarmManager.cancel(alarm);
+        alarm.cancel();
+    }
+
+    @Test
+    public void statisticsScreenUsesCurrentUsersApplicationData() {
+        long userId;
+        try (DatabaseHelper database = new DatabaseHelper(context)) {
+            userId = database.insertUser(
+                    "Taylor Applicant", "taylor@example.com", "5551234567", "test-hash");
+            database.insertJobApplication(jobAt(
+                    userId, "Acme", "Engineer", "Applied", System.currentTimeMillis()));
+            database.insertJobApplication(jobAt(
+                    userId, "Northwind", "Designer", "Pending", System.currentTimeMillis()));
+            long otherUserId = database.insertUser(
+                    "Other Applicant", "other@example.com", "", "test-hash");
+            database.insertJobApplication(jobAt(
+                    otherUserId, "Private", "Engineer", "Selected",
+                    System.currentTimeMillis()));
+        }
+        new SessionManager(context).createSession(userId);
+
+        try (ActivityScenario<StatisticsActivity> scenario =
+                     ActivityScenario.launch(StatisticsActivity.class)) {
+            scenario.onActivity(activity -> {
+                MaterialCardView totalCard = activity.findViewById(R.id.card_stat_total);
+                assertEquals("2", ((TextView) totalCard.findViewById(
+                        R.id.text_status_count)).getText().toString());
+                MaterialCardView pendingCard = activity.findViewById(R.id.card_stat_pending);
+                assertEquals("1", ((TextView) pendingCard.findViewById(
+                        R.id.text_status_count)).getText().toString());
+                assertEquals(1, ((ApplicationPieChartView) activity.findViewById(
+                        R.id.chart_application_status)).getValues()[1]);
+                assertEquals(1, ((ApplicationPieChartView) activity.findViewById(
+                        R.id.chart_application_status)).getValues()[2]);
+                assertEquals(2, ((MonthlyApplicationsChartView) activity.findViewById(
+                        R.id.chart_monthly_applications)).getValues()[5]);
+            });
         }
     }
 

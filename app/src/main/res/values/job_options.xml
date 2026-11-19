@@ -22,4 +22,17 @@
         <item>@string/sort_oldest_first</item>
         <item>@string/sort_company_az</item>
     </string-array>
+    <string-array name="reminder_types">
+        <item>@string/reminder_select_type</item>
+        <item>@string/reminder_type_interview</item>
+        <item>@string/reminder_type_follow_up</item>
+        <item>@string/reminder_type_hr_contact</item>
+        <item>@string/reminder_type_other</item>
+    </string-array>
+    <string-array name="reminder_filters">
+        <item>@string/reminder_filter_all</item>
+        <item>@string/reminder_filter_upcoming</item>
+        <item>@string/reminder_filter_past</item>
+        <item>@string/reminder_filter_completed</item>
+    </string-array>
 </resources>
