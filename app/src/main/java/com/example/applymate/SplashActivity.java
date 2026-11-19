@@ -8,12 +8,16 @@ import android.os.Looper;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.example.applymate.utils.SessionManager;
+
 @SuppressLint("CustomSplashScreen")
 public class SplashActivity extends AppCompatActivity {
 
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Runnable openWelcomeScreen = () -> {
-        startActivity(new Intent(SplashActivity.this, MainActivity.class));
+        Class<?> destination = new SessionManager(SplashActivity.this).isLoggedIn()
+                ? MainActivity.class : WelcomeActivity.class;
+        startActivity(new Intent(SplashActivity.this, destination));
         finish();
     };
 

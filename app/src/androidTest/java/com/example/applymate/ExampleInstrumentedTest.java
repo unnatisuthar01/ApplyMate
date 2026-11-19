@@ -13,8 +13,10 @@ import androidx.test.platform.app.InstrumentationRegistry;
 import androidx.test.core.app.ActivityScenario;
 import androidx.test.espresso.assertion.ViewAssertions;
 import androidx.test.espresso.matcher.ViewMatchers;
+import androidx.recyclerview.widget.RecyclerView;
 
 import com.example.applymate.database.DatabaseHelper;
+import com.example.applymate.models.JobApplication;
 import com.example.applymate.models.User;
 import com.example.applymate.utils.PasswordHasher;
 import com.example.applymate.utils.SessionManager;
@@ -304,6 +306,140 @@ public class ExampleInstrumentedTest {
         }
     }
 
+    @Test
+    public void jobCrudAndDashboardAreScopedToTheCurrentUser() {
+        long userId;
+        try (DatabaseHelper database = new DatabaseHelper(context)) {
+            userId = database.insertUser(
+                    "Taylor Applicant", "taylor@example.com", "5551234567", "test-hash");
+            long otherUserId = database.insertUser(
+                    "Other Applicant", "other@example.com", "", "test-hash");
+            database.insertJobApplication(job(
+                    userId, "Acme", "Engineer", "Saved"));
+            database.insertJobApplication(job(
+                    userId, "Northwind", "Designer", "Interview"));
+            long otherJobId = database.insertJobApplication(
+                    job(otherUserId, "Other Co", "Analyst", "Applied"));
+
+            assertEquals(2, database.getJobApplications(userId, null, 0).size());
+            assertEquals(1, database.getJobApplications(userId, "Saved", 0).size());
+            assertEquals(Integer.valueOf(2),
+                    database.getApplicationCounts(userId).get("Total"));
+            assertEquals(Integer.valueOf(1),
+                    database.getApplicationCounts(userId).get("Interview"));
+            assertEquals(null, database.getJobApplication(otherJobId, userId));
+
+            JobApplication saved = database.getJobApplications(userId, "Saved", 1).get(0);
+            JobApplication updated = job(userId, "Acme", "Senior Engineer", "Applied",
+                    saved.getId());
+            assertTrue(database.updateJobApplication(updated));
+            assertEquals("Senior Engineer",
+                    database.getJobApplication(saved.getId(), userId).getJobRole());
+            assertTrue(database.deleteJobApplication(saved.getId(), userId));
+            assertFalse(database.deleteJobApplication(otherJobId, userId));
+        }
+
+        try (DatabaseHelper reopenedDatabase = new DatabaseHelper(context)) {
+            assertEquals(1, reopenedDatabase.getJobApplications(userId, null, 0).size());
+            assertEquals("Interview", reopenedDatabase
+                    .getJobApplications(userId, null, 0).get(0).getStatus());
+        }
+    }
+
+    @Test
+    public void dashboardAddEditAndDeleteApplicationFlow() {
+        long userId;
+        try (DatabaseHelper database = new DatabaseHelper(context)) {
+            userId = database.insertUser(
+                    "Taylor Applicant", "taylor@example.com", "5551234567", "test-hash");
+        }
+        new SessionManager(context).createSession(userId);
+
+        try (ActivityScenario<MainActivity> ignored =
+                     ActivityScenario.launch(MainActivity.class)) {
+            Espresso.onView(withId(R.id.text_greeting))
+                    .check(ViewAssertions.matches(
+                            ViewMatchers.withText("Welcome back, Taylor")));
+
+            Espresso.onView(withId(R.id.button_add_application)).perform(ViewActions.click());
+            Espresso.onView(withId(R.id.button_save_job))
+                    .perform(ViewActions.scrollTo(), ViewActions.click());
+            Espresso.onView(withId(R.id.input_company_name))
+                    .check(ViewAssertions.matches(
+                            errorTextIs(context.getString(R.string.required_field))));
+
+            Espresso.onView(withId(R.id.input_company_name))
+                    .perform(ViewActions.typeText("Acme"));
+            Espresso.onView(withId(R.id.input_job_role))
+                    .perform(ViewActions.typeText("Engineer"), ViewActions.closeSoftKeyboard());
+            Espresso.onView(withId(R.id.spinner_job_type)).perform(ViewActions.click());
+            Espresso.onData(org.hamcrest.Matchers.allOf(
+                            org.hamcrest.Matchers.is("Full-time")))
+                    .perform(ViewActions.click());
+            Espresso.onView(withId(R.id.button_save_job))
+                    .perform(ViewActions.scrollTo(), ViewActions.click());
+
+            Espresso.onView(withId(R.id.count_total))
+                    .check(ViewAssertions.matches(ViewMatchers.withText("1")));
+            Espresso.onView(withId(R.id.text_company_name)).perform(ViewActions.click());
+            Espresso.onView(withId(R.id.text_detail_company))
+                    .check(ViewAssertions.matches(ViewMatchers.withText("Acme")));
+
+            Espresso.onView(withId(R.id.button_edit_job)).perform(ViewActions.click());
+            Espresso.onView(withId(R.id.input_job_role))
+                    .perform(ViewActions.replaceText("Senior Engineer"),
+                            ViewActions.closeSoftKeyboard());
+            Espresso.onView(withId(R.id.button_save_job))
+                    .perform(ViewActions.scrollTo(), ViewActions.click());
+            Espresso.onView(withId(R.id.text_detail_role))
+                    .check(ViewAssertions.matches(ViewMatchers.withText("Senior Engineer")));
+
+            Espresso.onView(withId(R.id.button_delete_job)).perform(ViewActions.click());
+            Espresso.onView(ViewMatchers.withText(R.string.confirm_delete))
+                    .perform(ViewActions.click());
+            Espresso.onView(withId(R.id.count_total))
+                    .check(ViewAssertions.matches(ViewMatchers.withText("0")));
+            Espresso.onView(withId(R.id.text_recent_empty))
+                    .check(ViewAssertions.matches(ViewMatchers.isDisplayed()));
+        }
+    }
+
+    @Test
+    public void dashboardStatusCardOpensUserFilteredApplications() {
+        long userId;
+        try (DatabaseHelper database = new DatabaseHelper(context)) {
+            userId = database.insertUser(
+                    "Taylor Applicant", "taylor@example.com", "5551234567", "test-hash");
+            long otherUserId = database.insertUser(
+                    "Other Applicant", "other@example.com", "", "test-hash");
+            database.insertJobApplication(job(userId, "Acme", "Engineer", "Saved"));
+            database.insertJobApplication(job(otherUserId, "Other Co", "Analyst", "Saved"));
+        }
+        new SessionManager(context).createSession(userId);
+
+        try (ActivityScenario<MainActivity> ignored =
+                     ActivityScenario.launch(MainActivity.class)) {
+            Espresso.onView(withId(R.id.card_saved)).perform(ViewActions.click());
+            Espresso.onView(withId(R.id.text_list_title))
+                    .check(ViewAssertions.matches(ViewMatchers.withText("Saved")));
+            Espresso.onView(withId(R.id.text_company_name))
+                    .check(ViewAssertions.matches(ViewMatchers.withText("Acme")));
+            Espresso.onView(withId(R.id.recycler_applications))
+                    .check(ViewAssertions.matches(hasItemCount(1)));
+        }
+    }
+
+    private JobApplication job(long userId, String company, String role, String status) {
+        return job(userId, company, role, status, 0);
+    }
+
+    private JobApplication job(
+            long userId, String company, String role, String status, long id) {
+        return new JobApplication(
+                id, userId, company, role, "Remote", "Full-time", 100000.0,
+                1700000000000L, status, "Description", "https://example.com/job", "Notes");
+    }
+
     private ActivityScenario<RegistrationActivity> enterRegistration(
             String email, String password, String confirmation) {
         ActivityScenario<RegistrationActivity> scenario =
@@ -332,6 +468,24 @@ public class ExampleInstrumentedTest {
                 }
                 CharSequence error = ((TextView) view).getError();
                 return error != null && expectedError.contentEquals(error);
+            }
+        };
+    }
+
+    private Matcher<View> hasItemCount(int expectedCount) {
+        return new TypeSafeMatcher<View>() {
+            @Override
+            public void describeTo(Description description) {
+                description.appendText("has RecyclerView item count: ").appendValue(expectedCount);
+            }
+
+            @Override
+            protected boolean matchesSafely(View view) {
+                if (!(view instanceof RecyclerView)) {
+                    return false;
+                }
+                RecyclerView.Adapter<?> adapter = ((RecyclerView) view).getAdapter();
+                return adapter != null && adapter.getItemCount() == expectedCount;
             }
         };
     }

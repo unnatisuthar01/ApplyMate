@@ -9,8 +9,13 @@ import android.database.sqlite.SQLiteException;
 import android.database.sqlite.SQLiteOpenHelper;
 
 import com.example.applymate.models.User;
+import com.example.applymate.models.JobApplication;
 
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 public class DatabaseHelper extends SQLiteOpenHelper {
 
@@ -121,6 +126,154 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 null,
                 null,
                 "application_date DESC, id DESC");
+    }
+
+    public List<JobApplication> getJobApplications(long userId, String status, int limit) {
+        List<JobApplication> applications = new ArrayList<>();
+        String selection = "user_id = ?";
+        List<String> selectionArgs = new ArrayList<>();
+        selectionArgs.add(Long.toString(userId));
+        if (status != null && !status.trim().isEmpty()) {
+            selection += " AND status = ?";
+            selectionArgs.add(status);
+        }
+
+        String safeLimit = limit > 0 ? Integer.toString(limit) : null;
+        try (Cursor cursor = getReadableDatabase().query(
+                TABLE_JOB_APPLICATIONS,
+                null,
+                selection,
+                selectionArgs.toArray(new String[0]),
+                null,
+                null,
+                "application_date DESC, id DESC",
+                safeLimit)) {
+            while (cursor.moveToNext()) {
+                applications.add(readJobApplication(cursor));
+            }
+        }
+        return applications;
+    }
+
+    public JobApplication getJobApplication(long jobId, long userId) {
+        try (Cursor cursor = getReadableDatabase().query(
+                TABLE_JOB_APPLICATIONS,
+                null,
+                "id = ? AND user_id = ?",
+                new String[]{Long.toString(jobId), Long.toString(userId)},
+                null,
+                null,
+                null,
+                "1")) {
+            return cursor.moveToFirst() ? readJobApplication(cursor) : null;
+        }
+    }
+
+    public Map<String, Integer> getApplicationCounts(long userId) {
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        counts.put("Total", 0);
+        counts.put("Saved", 0);
+        counts.put("Applied", 0);
+        counts.put("Interview", 0);
+        counts.put("Selected", 0);
+        counts.put("Rejected", 0);
+
+        try (Cursor cursor = getReadableDatabase().rawQuery(
+                "SELECT status, COUNT(*) AS count FROM " + TABLE_JOB_APPLICATIONS
+                        + " WHERE user_id = ? GROUP BY status",
+                new String[]{Long.toString(userId)})) {
+            while (cursor.moveToNext()) {
+                String status = cursor.getString(cursor.getColumnIndexOrThrow("status"));
+                int count = cursor.getInt(cursor.getColumnIndexOrThrow("count"));
+                counts.put("Total", counts.get("Total") + count);
+                if (counts.containsKey(status)) {
+                    counts.put(status, count);
+                }
+            }
+        }
+        return counts;
+    }
+
+    public long insertJobApplication(JobApplication application) {
+        ContentValues values = jobValues(application);
+        values.put("user_id", application.getUserId());
+        return getWritableDatabase().insertOrThrow(TABLE_JOB_APPLICATIONS, null, values);
+    }
+
+    public boolean updateJobApplication(JobApplication application) {
+        ContentValues values = jobValues(application);
+        return getWritableDatabase().update(
+                TABLE_JOB_APPLICATIONS,
+                values,
+                "id = ? AND user_id = ?",
+                new String[]{Long.toString(application.getId()),
+                        Long.toString(application.getUserId())}) == 1;
+    }
+
+    public boolean deleteJobApplication(long jobId, long userId) {
+        return getWritableDatabase().delete(
+                TABLE_JOB_APPLICATIONS,
+                "id = ? AND user_id = ?",
+                new String[]{Long.toString(jobId), Long.toString(userId)}) == 1;
+    }
+
+    public User getUserById(long userId) {
+        try (Cursor cursor = getReadableDatabase().query(
+                TABLE_USERS,
+                new String[]{"id", "name", "email", "mobile", "password_hash"},
+                "id = ?",
+                new String[]{Long.toString(userId)},
+                null,
+                null,
+                null,
+                "1")) {
+            if (!cursor.moveToFirst()) {
+                return null;
+            }
+            return new User(
+                    cursor.getLong(cursor.getColumnIndexOrThrow("id")),
+                    cursor.getString(cursor.getColumnIndexOrThrow("name")),
+                    cursor.getString(cursor.getColumnIndexOrThrow("email")),
+                    cursor.getString(cursor.getColumnIndexOrThrow("mobile")),
+                    cursor.getString(cursor.getColumnIndexOrThrow("password_hash")));
+        }
+    }
+
+    private static ContentValues jobValues(JobApplication application) {
+        ContentValues values = new ContentValues();
+        values.put("company_name", application.getCompanyName());
+        values.put("job_role", application.getJobRole());
+        values.put("location", application.getLocation());
+        values.put("job_type", application.getJobType());
+        if (application.getSalary() == null) {
+            values.putNull("salary");
+        } else {
+            values.put("salary", application.getSalary());
+        }
+        values.put("application_date", application.getApplicationDate());
+        values.put("status", application.getStatus());
+        values.put("description", application.getDescription());
+        values.put("job_link", application.getJobLink());
+        values.put("notes", application.getNotes());
+        return values;
+    }
+
+    private static JobApplication readJobApplication(Cursor cursor) {
+        int salaryIndex = cursor.getColumnIndexOrThrow("salary");
+        Double salary = cursor.isNull(salaryIndex) ? null : cursor.getDouble(salaryIndex);
+        return new JobApplication(
+                cursor.getLong(cursor.getColumnIndexOrThrow("id")),
+                cursor.getLong(cursor.getColumnIndexOrThrow("user_id")),
+                cursor.getString(cursor.getColumnIndexOrThrow("company_name")),
+                cursor.getString(cursor.getColumnIndexOrThrow("job_role")),
+                cursor.getString(cursor.getColumnIndexOrThrow("location")),
+                cursor.getString(cursor.getColumnIndexOrThrow("job_type")),
+                salary,
+                cursor.getLong(cursor.getColumnIndexOrThrow("application_date")),
+                cursor.getString(cursor.getColumnIndexOrThrow("status")),
+                cursor.getString(cursor.getColumnIndexOrThrow("description")),
+                cursor.getString(cursor.getColumnIndexOrThrow("job_link")),
+                cursor.getString(cursor.getColumnIndexOrThrow("notes")));
     }
 
     public Cursor getRemindersForUser(long userId) {

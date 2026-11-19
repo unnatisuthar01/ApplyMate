@@ -23,6 +23,21 @@
             android:name=".MainActivity"
             android:exported="false" />
         <activity
+            android:name=".WelcomeActivity"
+            android:exported="false" />
+        <activity
+            android:name=".ApplicationsActivity"
+            android:exported="false" />
+        <activity
+            android:name=".AddJobActivity"
+            android:exported="false" />
+        <activity
+            android:name=".JobDetailsActivity"
+            android:exported="false" />
+        <activity
+            android:name=".EditJobActivity"
+            android:exported="false" />
+        <activity
             android:name=".SplashActivity"
             android:exported="true"
             android:windowSoftInputMode="adjustResize">
