@@ -129,13 +129,30 @@ public class DatabaseHelper extends SQLiteOpenHelper {
     }
 
     public List<JobApplication> getJobApplications(long userId, String status, int limit) {
+        return searchJobApplications(
+                userId, null, status, ApplicationSortOrder.NEWEST_FIRST, limit);
+    }
+
+    public List<JobApplication> searchJobApplications(
+            long userId,
+            String searchQuery,
+            String status,
+            ApplicationSortOrder sortOrder,
+            int limit) {
         List<JobApplication> applications = new ArrayList<>();
         String selection = "user_id = ?";
         List<String> selectionArgs = new ArrayList<>();
         selectionArgs.add(Long.toString(userId));
         if (status != null && !status.trim().isEmpty()) {
-            selection += " AND status = ?";
+            selection += " AND status = ? COLLATE NOCASE";
             selectionArgs.add(status);
+        }
+        if (searchQuery != null && !searchQuery.trim().isEmpty()) {
+            String searchPattern = "%" + escapeLikePattern(searchQuery.trim()) + "%";
+            selection += " AND (company_name LIKE ? ESCAPE '\\' COLLATE NOCASE"
+                    + " OR job_role LIKE ? ESCAPE '\\' COLLATE NOCASE)";
+            selectionArgs.add(searchPattern);
+            selectionArgs.add(searchPattern);
         }
 
         String safeLimit = limit > 0 ? Integer.toString(limit) : null;
@@ -146,13 +163,35 @@ public class DatabaseHelper extends SQLiteOpenHelper {
                 selectionArgs.toArray(new String[0]),
                 null,
                 null,
-                "application_date DESC, id DESC",
+                sortOrder.getOrderBy(),
                 safeLimit)) {
             while (cursor.moveToNext()) {
                 applications.add(readJobApplication(cursor));
             }
         }
         return applications;
+    }
+
+    private static String escapeLikePattern(String value) {
+        return value.replace("\\", "\\\\")
+                .replace("%", "\\%")
+                .replace("_", "\\_");
+    }
+
+    public enum ApplicationSortOrder {
+        NEWEST_FIRST("application_date DESC, id DESC"),
+        OLDEST_FIRST("application_date ASC, id ASC"),
+        COMPANY_NAME_ASC("company_name COLLATE NOCASE ASC, job_role COLLATE NOCASE ASC, id ASC");
+
+        private final String orderBy;
+
+        ApplicationSortOrder(String orderBy) {
+            this.orderBy = orderBy;
+        }
+
+        private String getOrderBy() {
+            return orderBy;
+        }
     }
 
     public JobApplication getJobApplication(long jobId, long userId) {

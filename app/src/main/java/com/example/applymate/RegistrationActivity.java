@@ -27,6 +27,7 @@ public class RegistrationActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_registration);
+        ScreenInsets.apply(this);
 
         fullNameInput = findViewById(R.id.input_full_name);
         emailInput = findViewById(R.id.input_email);

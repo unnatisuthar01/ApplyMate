@@ -25,6 +25,7 @@ public class SplashActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_splash);
+        ScreenInsets.apply(this);
         handler.postDelayed(openWelcomeScreen, 1200);
     }
 

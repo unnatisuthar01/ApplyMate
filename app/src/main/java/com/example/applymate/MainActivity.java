@@ -33,6 +33,7 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+        ScreenInsets.apply(this);
 
         userId = ScreenNavigation.requireUserId(this);
         if (userId < 1) {

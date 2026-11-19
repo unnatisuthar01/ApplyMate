@@ -51,8 +51,15 @@
     <string name="add_application">Add Application</string>
     <string name="all_applications">Applications</string>
     <string name="application_filter">%1$s applications</string>
+    <string name="search_applications">Search company or job role</string>
+    <string name="filter_all">All</string>
+    <string name="sort_by">Sort:</string>
+    <string name="sort_newest_first">Newest First</string>
+    <string name="sort_oldest_first">Oldest First</string>
+    <string name="sort_company_az">Company Name (A-Z)</string>
+    <string name="clear_filters">Clear Filters</string>
+    <string name="no_results_found">No Results Found</string>
     <string name="no_applications_yet">No applications yet. Add one to get started.</string>
-    <string name="no_applications_filter">No applications found for this status.</string>
     <string name="nav_home">Home</string>
     <string name="nav_applications">Applications</string>
     <string name="nav_statistics">Statistics</string>
@@ -80,6 +87,7 @@
     <string name="job_type_other">Other</string>
     <string name="status_saved">Saved</string>
     <string name="status_applied">Applied</string>
+    <string name="status_pending">Pending</string>
     <string name="status_interview">Interview</string>
     <string name="status_selected">Selected</string>
     <string name="status_rejected">Rejected</string>

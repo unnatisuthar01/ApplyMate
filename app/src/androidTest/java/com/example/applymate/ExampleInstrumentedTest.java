@@ -4,6 +4,7 @@ import android.content.Context;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
 import android.view.View;
+import android.widget.Spinner;
 import android.widget.TextView;
 
 import androidx.test.espresso.Espresso;
@@ -20,6 +21,8 @@ import com.example.applymate.models.JobApplication;
 import com.example.applymate.models.User;
 import com.example.applymate.utils.PasswordHasher;
 import com.example.applymate.utils.SessionManager;
+import com.google.android.material.chip.ChipGroup;
+import com.google.android.material.textfield.TextInputEditText;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -29,6 +32,8 @@ import org.hamcrest.Matcher;
 import org.hamcrest.TypeSafeMatcher;
 
 import java.security.GeneralSecurityException;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import static androidx.test.espresso.matcher.ViewMatchers.withId;
 import static org.junit.Assert.assertEquals;
@@ -361,7 +366,8 @@ public class ExampleInstrumentedTest {
                     .check(ViewAssertions.matches(
                             ViewMatchers.withText("Welcome back, Taylor")));
 
-            Espresso.onView(withId(R.id.button_add_application)).perform(ViewActions.click());
+            Espresso.onView(withId(R.id.button_add_application))
+                    .perform(ViewActions.scrollTo(), ViewActions.click());
             Espresso.onView(withId(R.id.button_save_job))
                     .perform(ViewActions.scrollTo(), ViewActions.click());
             Espresso.onView(withId(R.id.input_company_name))
@@ -369,9 +375,12 @@ public class ExampleInstrumentedTest {
                             errorTextIs(context.getString(R.string.required_field))));
 
             Espresso.onView(withId(R.id.input_company_name))
-                    .perform(ViewActions.typeText("Acme"));
+                    .perform(ViewActions.scrollTo(), ViewActions.click(),
+                            ViewActions.replaceText("Acme"));
             Espresso.onView(withId(R.id.input_job_role))
-                    .perform(ViewActions.typeText("Engineer"), ViewActions.closeSoftKeyboard());
+                    .perform(ViewActions.scrollTo(), ViewActions.click(),
+                            ViewActions.replaceText("Engineer"),
+                            ViewActions.closeSoftKeyboard());
             Espresso.onView(withId(R.id.spinner_job_type)).perform(ViewActions.click());
             Espresso.onData(org.hamcrest.Matchers.allOf(
                             org.hamcrest.Matchers.is("Full-time")))
@@ -429,6 +438,109 @@ public class ExampleInstrumentedTest {
         }
     }
 
+    @Test
+    public void applicationSearchFiltersStatusesAndSortsWithinCurrentUser() {
+        long userId;
+        try (DatabaseHelper database = new DatabaseHelper(context)) {
+            userId = database.insertUser(
+                    "Taylor Applicant", "taylor@example.com", "5551234567", "test-hash");
+            long otherUserId = database.insertUser(
+                    "Other Applicant", "other@example.com", "", "test-hash");
+            database.insertJobApplication(jobAt(userId, "Zenith", "Software Engineer",
+                    "Applied", 600L));
+            database.insertJobApplication(jobAt(userId, "acme", "Product Designer",
+                    "Pending", 500L));
+            database.insertJobApplication(jobAt(userId, "Bright Labs", "Engineer",
+                    "Interview", 400L));
+            database.insertJobApplication(jobAt(userId, "Gamma", "Analyst",
+                    "Selected", 300L));
+            database.insertJobApplication(jobAt(userId, "Delta", "Researcher",
+                    "Rejected", 200L));
+            database.insertJobApplication(jobAt(otherUserId, "Acme", "Engineer",
+                    "Selected", 700L));
+
+            assertEquals(1, database.searchJobApplications(
+                    userId, "ZENITH", null,
+                    DatabaseHelper.ApplicationSortOrder.NEWEST_FIRST, 0).size());
+            assertEquals(2, database.searchJobApplications(
+                    userId, "engineer", null,
+                    DatabaseHelper.ApplicationSortOrder.NEWEST_FIRST, 0).size());
+            assertEquals("Pending", database.searchJobApplications(
+                    userId, null, "pending",
+                    DatabaseHelper.ApplicationSortOrder.NEWEST_FIRST, 0)
+                    .get(0).getStatus());
+            assertEquals(5, database.searchJobApplications(
+                    userId, null, null,
+                    DatabaseHelper.ApplicationSortOrder.NEWEST_FIRST, 0).size());
+            assertEquals("Zenith", database.searchJobApplications(
+                    userId, null, null,
+                    DatabaseHelper.ApplicationSortOrder.NEWEST_FIRST, 0)
+                    .get(0).getCompanyName());
+            assertEquals("Delta", database.searchJobApplications(
+                    userId, null, null,
+                    DatabaseHelper.ApplicationSortOrder.OLDEST_FIRST, 0)
+                    .get(0).getCompanyName());
+            assertEquals("acme", database.searchJobApplications(
+                    userId, null, null,
+                    DatabaseHelper.ApplicationSortOrder.COMPANY_NAME_ASC, 0)
+                    .get(0).getCompanyName());
+            assertEquals(1, database.searchJobApplications(
+                    userId, null, "Applied",
+                    DatabaseHelper.ApplicationSortOrder.NEWEST_FIRST, 0).size());
+            assertEquals(1, database.searchJobApplications(
+                    userId, null, "Interview",
+                    DatabaseHelper.ApplicationSortOrder.NEWEST_FIRST, 0).size());
+            assertEquals(1, database.searchJobApplications(
+                    userId, null, "Selected",
+                    DatabaseHelper.ApplicationSortOrder.NEWEST_FIRST, 0).size());
+            assertEquals(1, database.searchJobApplications(
+                    userId, null, "Rejected",
+                    DatabaseHelper.ApplicationSortOrder.NEWEST_FIRST, 0).size());
+            assertEquals(0, database.searchJobApplications(
+                    userId, "Other", null,
+                    DatabaseHelper.ApplicationSortOrder.NEWEST_FIRST, 0).size());
+        }
+    }
+
+    @Test
+    public void applicationScreenClearsSearchStatusAndSortFilters() {
+        long userId;
+        try (DatabaseHelper database = new DatabaseHelper(context)) {
+            userId = database.insertUser(
+                    "Taylor Applicant", "taylor@example.com", "5551234567", "test-hash");
+            database.insertJobApplication(jobAt(
+                    userId, "Acme", "Engineer", "Applied", 300L));
+            database.insertJobApplication(jobAt(
+                    userId, "Northwind", "Designer", "Pending", 200L));
+        }
+        new SessionManager(context).createSession(userId);
+
+        try (ActivityScenario<ApplicationsActivity> ignored =
+                     ActivityScenario.launch(ApplicationsActivity.class)) {
+            Espresso.onView(withId(R.id.input_search_applications))
+                    .perform(ViewActions.typeText("nothing"), ViewActions.closeSoftKeyboard());
+            Espresso.onView(withId(R.id.text_empty_applications))
+                    .check(ViewAssertions.matches(
+                            ViewMatchers.withText(R.string.no_results_found)));
+            Espresso.onView(withId(R.id.button_empty_clear_filters))
+                    .perform(ViewActions.click());
+            awaitAdapterItemCount(ignored, 2);
+            Espresso.onView(withId(R.id.recycler_applications))
+                    .check(ViewAssertions.matches(hasItemCount(2)));
+
+            Espresso.onView(withId(R.id.chip_filter_pending)).perform(ViewActions.click());
+            awaitAdapterItemCount(ignored, 1);
+            Espresso.onView(withId(R.id.recycler_applications))
+                    .check(ViewAssertions.matches(hasItemCount(1)));
+            Espresso.onView(withId(R.id.button_clear_filters)).perform(ViewActions.click());
+            awaitAdapterItemCount(ignored, 2);
+            Espresso.onView(withId(R.id.recycler_applications))
+                    .check(ViewAssertions.matches(hasItemCount(2)));
+            Espresso.onView(withId(R.id.chip_filter_all))
+                    .check(ViewAssertions.matches(ViewMatchers.isChecked()));
+        }
+    }
+
     private JobApplication job(long userId, String company, String role, String status) {
         return job(userId, company, role, status, 0);
     }
@@ -438,6 +550,13 @@ public class ExampleInstrumentedTest {
         return new JobApplication(
                 id, userId, company, role, "Remote", "Full-time", 100000.0,
                 1700000000000L, status, "Description", "https://example.com/job", "Notes");
+    }
+
+    private JobApplication jobAt(
+            long userId, String company, String role, String status, long applicationDate) {
+        return new JobApplication(
+                0, userId, company, role, "Remote", "Full-time", 100000.0,
+                applicationDate, status, "Description", "https://example.com/job", "Notes");
     }
 
     private ActivityScenario<RegistrationActivity> enterRegistration(
@@ -488,6 +607,89 @@ public class ExampleInstrumentedTest {
                 return adapter != null && adapter.getItemCount() == expectedCount;
             }
         };
+    }
+
+    private void awaitAdapterItemCount(
+            ActivityScenario<ApplicationsActivity> scenario, int expectedCount) {
+        CountDownLatch itemCountReached = new CountDownLatch(1);
+        RecyclerView.Adapter<?>[] adapterHolder = new RecyclerView.Adapter<?>[1];
+        RecyclerView.AdapterDataObserver[] observerHolder =
+                new RecyclerView.AdapterDataObserver[1];
+
+        scenario.onActivity(activity -> {
+            RecyclerView.Adapter<?> adapter =
+                    ((RecyclerView) activity.findViewById(R.id.recycler_applications)).getAdapter();
+            adapterHolder[0] = adapter;
+            if (adapter.getItemCount() == expectedCount) {
+                itemCountReached.countDown();
+                return;
+            }
+            observerHolder[0] = new RecyclerView.AdapterDataObserver() {
+                private void checkItemCount() {
+                    if (adapter.getItemCount() == expectedCount) {
+                        itemCountReached.countDown();
+                    }
+                }
+
+                @Override
+                public void onChanged() {
+                    checkItemCount();
+                }
+
+                @Override
+                public void onItemRangeInserted(int positionStart, int itemCount) {
+                    checkItemCount();
+                }
+
+                @Override
+                public void onItemRangeRemoved(int positionStart, int itemCount) {
+                    checkItemCount();
+                }
+            };
+            adapter.registerAdapterDataObserver(observerHolder[0]);
+        });
+
+        boolean reached;
+        try {
+            reached = itemCountReached.await(5, TimeUnit.SECONDS);
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError("Interrupted while waiting for the application list.", exception);
+        }
+        if (observerHolder[0] != null) {
+            scenario.onActivity(activity ->
+                    adapterHolder[0].unregisterAdapterDataObserver(observerHolder[0]));
+        }
+        final String[] state = new String[1];
+        if (!reached) {
+            scenario.onActivity(activity -> {
+                RecyclerView recyclerView =
+                        activity.findViewById(R.id.recycler_applications);
+                int databaseCount;
+                try (DatabaseHelper database = new DatabaseHelper(context)) {
+                    databaseCount = database.searchJobApplications(
+                            new SessionManager(context).getCurrentUserId(),
+                            "",
+                            null,
+                            DatabaseHelper.ApplicationSortOrder.NEWEST_FIRST,
+                            0).size();
+                }
+                state[0] = "search="
+                        + ((TextInputEditText) activity.findViewById(
+                                R.id.input_search_applications)).getText()
+                        + ", status="
+                        + ((ChipGroup) activity.findViewById(R.id.chip_group_status))
+                                .getCheckedChipId()
+                        + ", sort="
+                        + ((Spinner) activity.findViewById(
+                                R.id.spinner_application_sort)).getSelectedItemPosition()
+                        + ", adapter="
+                        + recyclerView.getAdapter().getItemCount()
+                        + ", database="
+                        + databaseCount;
+            });
+        }
+        assertTrue("RecyclerView did not reach the expected item count. " + state[0], reached);
     }
 
     private void assertTableColumns(SQLiteDatabase database, String table, String... expected) {

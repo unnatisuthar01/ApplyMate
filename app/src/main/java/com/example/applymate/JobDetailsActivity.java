@@ -23,6 +23,7 @@ public class JobDetailsActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_job_details);
+        ScreenInsets.apply(this);
         userId = ScreenNavigation.requireUserId(this);
         if (userId < 1) {
             return;
