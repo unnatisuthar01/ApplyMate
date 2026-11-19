@@ -14,6 +14,7 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import com.example.applymate.database.DatabaseHelper;
 import com.example.applymate.models.Reminder;
+import com.example.applymate.utils.ReminderPreferences;
 import com.google.android.material.button.MaterialButton;
 
 import java.text.SimpleDateFormat;
@@ -202,6 +203,8 @@ public class AddEditReminderActivity extends AppCompatActivity {
             int message = ReminderScheduler.getTriggerAt(
                     reminderDate, reminderTime) <= System.currentTimeMillis()
                     ? R.string.reminder_saved_past
+                    : !ReminderPreferences.areReminderAlertsEnabled(this)
+                    ? R.string.reminder_saved_notifications_disabled
                     : ReminderNotifications.areNotificationsEnabled(this)
                     ? R.string.reminder_saved
                     : R.string.reminder_saved_without_notification_permission;

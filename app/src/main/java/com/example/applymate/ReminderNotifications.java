@@ -12,6 +12,8 @@ import android.os.Build;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 
+import com.example.applymate.utils.ReminderPreferences;
+
 final class ReminderNotifications {
 
     private static final String CHANNEL_ID = "applymate_reminders";
@@ -46,7 +48,8 @@ final class ReminderNotifications {
     }
 
     static void show(Context context, long reminderId, String title, String description) {
-        if (!areNotificationsEnabled(context)) {
+        if (!areNotificationsEnabled(context)
+                || !ReminderPreferences.areReminderAlertsEnabled(context)) {
             return;
         }
         createChannel(context);
@@ -78,5 +81,9 @@ final class ReminderNotifications {
         } catch (SecurityException exception) {
             android.util.Log.w("ApplyMate", "Notification permission is not available.", exception);
         }
+    }
+
+    static void cancel(Context context, long reminderId) {
+        NotificationManagerCompat.from(context).cancel((int) reminderId);
     }
 }

@@ -24,6 +24,7 @@ import com.example.applymate.models.JobApplication;
 import com.example.applymate.models.Reminder;
 import com.example.applymate.models.User;
 import com.example.applymate.utils.PasswordHasher;
+import com.example.applymate.utils.ReminderPreferences;
 import com.example.applymate.utils.SessionManager;
 import com.google.android.material.chip.ChipGroup;
 import com.google.android.material.card.MaterialCardView;
@@ -57,6 +58,7 @@ public class ExampleInstrumentedTest {
         context = InstrumentationRegistry.getInstrumentation().getTargetContext();
         context.deleteDatabase(DatabaseHelper.DATABASE_NAME);
         new SessionManager(context).clearSession();
+        ReminderPreferences.setReminderAlertsEnabled(context, true);
         assertEquals("com.example.applymate", context.getPackageName());
     }
 
@@ -65,6 +67,18 @@ public class ExampleInstrumentedTest {
             throws GeneralSecurityException {
         try (ActivityScenario<RegistrationActivity> ignored =
                      enterRegistration("Taylor@example.com", "Passw0rd99", "Passw0rd99")) {
+            ignored.onActivity(activity -> {
+                assertEquals("Taylor Applicant", ((TextInputEditText) activity.findViewById(
+                        R.id.input_full_name)).getText().toString());
+                assertEquals("Taylor@example.com", ((TextInputEditText) activity.findViewById(
+                        R.id.input_email)).getText().toString());
+                assertEquals("5551234567", ((TextInputEditText) activity.findViewById(
+                        R.id.input_mobile)).getText().toString());
+                assertEquals("Passw0rd99", ((TextInputEditText) activity.findViewById(
+                        R.id.input_password)).getText().toString());
+                assertEquals("Passw0rd99", ((TextInputEditText) activity.findViewById(
+                        R.id.input_confirm_password)).getText().toString());
+            });
             Espresso.onView(withId(R.id.button_register))
                     .perform(ViewActions.scrollTo(), ViewActions.click());
 
@@ -125,23 +139,27 @@ public class ExampleInstrumentedTest {
         try (ActivityScenario<LoginActivity> ignored =
                      ActivityScenario.launch(LoginActivity.class)) {
             Espresso.onView(withId(R.id.input_email))
-                    .perform(ViewActions.typeText("missing@example.com"));
+                    .perform(ViewActions.click(), ViewActions.replaceText("missing@example.com"));
             Espresso.onView(withId(R.id.input_password))
-                    .perform(ViewActions.typeText("Passw0rd99"), ViewActions.closeSoftKeyboard());
+                    .perform(ViewActions.click(), ViewActions.replaceText("Passw0rd99"),
+                            ViewActions.closeSoftKeyboard());
             Espresso.onView(withId(R.id.button_login)).perform(ViewActions.click());
             assertFalse(new SessionManager(context).isLoggedIn());
 
             Espresso.onView(withId(R.id.input_email))
-                    .perform(ViewActions.replaceText("taylor@example.com"));
+                    .perform(ViewActions.click(), ViewActions.replaceText("taylor@example.com"));
             Espresso.onView(withId(R.id.input_password))
-                    .perform(ViewActions.replaceText("WrongPass99"), ViewActions.closeSoftKeyboard());
+                    .perform(ViewActions.click(), ViewActions.replaceText("WrongPass99"),
+                            ViewActions.closeSoftKeyboard());
             Espresso.onView(withId(R.id.button_login)).perform(ViewActions.click());
             assertFalse(new SessionManager(context).isLoggedIn());
 
             Espresso.onView(withId(R.id.input_password))
-                    .perform(ViewActions.replaceText("Passw0rd99"), ViewActions.closeSoftKeyboard());
+                    .perform(ViewActions.click(), ViewActions.replaceText("Passw0rd99"),
+                            ViewActions.closeSoftKeyboard());
             Espresso.onView(withId(R.id.button_login)).perform(ViewActions.click());
             Espresso.onView(withId(R.id.button_logout))
+                    .perform(ViewActions.scrollTo())
                     .check(ViewAssertions.matches(ViewMatchers.isDisplayed()));
         }
 
@@ -163,14 +181,16 @@ public class ExampleInstrumentedTest {
 
         try (ActivityScenario<ForgotPasswordActivity> ignored =
                      ActivityScenario.launch(ForgotPasswordActivity.class)) {
-            Espresso.onView(withId(R.id.input_email))
-                    .perform(ViewActions.typeText("taylor@example.com"));
-            Espresso.onView(withId(R.id.input_current_password))
-                    .perform(ViewActions.typeText("Passw0rd99"));
-            Espresso.onView(withId(R.id.input_new_password))
-                    .perform(ViewActions.typeText("NewPassw0rd88"));
-            Espresso.onView(withId(R.id.input_confirm_new_password))
-                    .perform(ViewActions.typeText("NewPassw0rd88"), ViewActions.closeSoftKeyboard());
+            ignored.onActivity(activity -> {
+                ((TextInputEditText) activity.findViewById(R.id.input_email))
+                        .setText("taylor@example.com");
+                ((TextInputEditText) activity.findViewById(R.id.input_current_password))
+                        .setText("Passw0rd99");
+                ((TextInputEditText) activity.findViewById(R.id.input_new_password))
+                        .setText("NewPassw0rd88");
+                ((TextInputEditText) activity.findViewById(R.id.input_confirm_new_password))
+                        .setText("NewPassw0rd88");
+            });
             Espresso.onView(withId(R.id.button_reset_password))
                     .perform(ViewActions.scrollTo(), ViewActions.click());
         }
@@ -188,11 +208,15 @@ public class ExampleInstrumentedTest {
         new SessionManager(context).createSession(userId);
         try (ActivityScenario<MainActivity> ignored =
                      ActivityScenario.launch(MainActivity.class)) {
-            Espresso.onView(withId(R.id.button_logout)).perform(ViewActions.click());
+            Espresso.onView(withId(R.id.button_logout))
+                    .perform(ViewActions.scrollTo(), ViewActions.click());
             assertFalse(new SessionManager(context).isLoggedIn());
             Espresso.onView(withId(R.id.button_login))
                     .check(ViewAssertions.matches(ViewMatchers.isDisplayed()));
-            Espresso.pressBack();
+            Espresso.pressBackUnconditionally();
+        }
+        try (ActivityScenario<MainActivity> ignored =
+                     ActivityScenario.launch(MainActivity.class)) {
             Espresso.onView(withId(R.id.button_login))
                     .check(ViewAssertions.matches(ViewMatchers.isDisplayed()));
         }
@@ -200,6 +224,158 @@ public class ExampleInstrumentedTest {
         try (DatabaseHelper reopenedDatabase = new DatabaseHelper(context)) {
             assertTrue(reopenedDatabase.userExists("taylor@example.com"));
         }
+    }
+
+    @Test
+    public void profileEditAndChangePasswordPersistForTheCurrentUser()
+            throws GeneralSecurityException {
+        long userId;
+        try (DatabaseHelper database = new DatabaseHelper(context)) {
+            userId = database.insertUser(
+                    "Taylor Applicant", "taylor@example.com", "5551234567",
+                    PasswordHasher.hashAndClear("Passw0rd99".toCharArray()));
+            database.insertUser(
+                    "Other Applicant", "other@example.com", "", "hash");
+            assertFalse(database.updateUserProfile(
+                    userId, "Taylor Applicant", "other@example.com", "5551234567"));
+        }
+        new SessionManager(context).createSession(userId);
+
+        try (ActivityScenario<MainActivity> ignored =
+                     ActivityScenario.launch(MainActivity.class)) {
+            Espresso.onView(withId(R.id.nav_profile)).perform(ViewActions.click());
+            Espresso.onView(withId(R.id.text_profile_name))
+                    .check(ViewAssertions.matches(
+                            ViewMatchers.withText("Taylor Applicant")));
+            Espresso.onView(withId(R.id.button_edit_profile))
+                    .perform(ViewActions.scrollTo(), ViewActions.click());
+            Espresso.onView(withId(R.id.input_profile_name))
+                    .perform(ViewActions.replaceText("Taylor Updated"));
+            Espresso.onView(withId(R.id.input_profile_email))
+                    .perform(ViewActions.replaceText("updated@example.com"));
+            Espresso.onView(withId(R.id.input_profile_mobile))
+                    .perform(ViewActions.replaceText("5557654321"));
+            Espresso.onView(withId(R.id.button_save_profile))
+                    .perform(ViewActions.scrollTo(), ViewActions.click());
+
+            Espresso.onView(withId(R.id.text_profile_name))
+                    .check(ViewAssertions.matches(ViewMatchers.withText("Taylor Updated")));
+            Espresso.onView(withId(R.id.button_change_password))
+                    .perform(ViewActions.scrollTo(), ViewActions.click());
+            Espresso.onView(withId(R.id.input_change_current_password))
+                    .perform(ViewActions.typeText("Passw0rd99"));
+            Espresso.onView(withId(R.id.input_change_new_password))
+                    .perform(ViewActions.typeText("NewPassw0rd88"));
+            Espresso.onView(withId(R.id.input_change_confirm_password))
+                    .perform(ViewActions.scrollTo(), ViewActions.typeText("NewPassw0rd88"),
+                            ViewActions.closeSoftKeyboard());
+            Espresso.onView(withId(R.id.button_save_password))
+                    .perform(ViewActions.scrollTo(), ViewActions.click());
+        }
+
+        assertTrue(new SessionManager(context).isLoggedIn());
+        try (DatabaseHelper database = new DatabaseHelper(context)) {
+            User user = database.findUserByEmail("updated@example.com");
+            assertNotNull(user);
+            assertEquals("Taylor Updated", user.getName());
+            assertEquals("5557654321", user.getMobile());
+            assertTrue(PasswordHasher.verifyAndClear(
+                    "NewPassw0rd88".toCharArray(), user.getPasswordHash()));
+        }
+    }
+
+    @Test
+    public void deleteAccountCascadesOnlyItsOwnDataAndCancelsItsReminderAlarm() {
+        long userId;
+        long otherUserId;
+        long userReminderId;
+        long otherReminderId;
+        java.util.Calendar reminderDate = java.util.Calendar.getInstance();
+        reminderDate.add(java.util.Calendar.DAY_OF_MONTH, 2);
+        reminderDate.set(java.util.Calendar.HOUR_OF_DAY, 0);
+        reminderDate.set(java.util.Calendar.MINUTE, 0);
+        reminderDate.set(java.util.Calendar.SECOND, 0);
+        reminderDate.set(java.util.Calendar.MILLISECOND, 0);
+        long triggerDate = reminderDate.getTimeInMillis();
+        try (DatabaseHelper database = new DatabaseHelper(context)) {
+            userId = database.insertUser(
+                    "Taylor Applicant", "taylor@example.com", "5551234567", "hash");
+            otherUserId = database.insertUser(
+                    "Other Applicant", "other@example.com", "5557654321", "hash");
+            database.insertJobApplication(jobAt(
+                    userId, "Taylor Co", "Engineer", "Applied", System.currentTimeMillis()));
+            database.insertJobApplication(jobAt(
+                    otherUserId, "Other Co", "Designer", "Applied", System.currentTimeMillis()));
+            userReminderId = database.insertReminder(new Reminder(
+                    0, userId, null, "Taylor reminder", "", "Other",
+                    triggerDate, "23:59", "Upcoming"));
+            otherReminderId = database.insertReminder(new Reminder(
+                    0, otherUserId, null, "Other reminder", "", "Other",
+                    triggerDate, "23:59", "Upcoming"));
+        }
+        new SessionManager(context).createSession(userId);
+        ReminderScheduler.schedule(context, new Reminder(
+                userReminderId, userId, null, "Taylor reminder", "", "Other",
+                triggerDate, "23:59", "Upcoming"));
+
+        try (ActivityScenario<ProfileActivity> ignored =
+                     ActivityScenario.launch(ProfileActivity.class)) {
+            Espresso.onView(withId(R.id.button_delete_account))
+                    .perform(ViewActions.scrollTo(), ViewActions.click());
+            Espresso.onView(withId(android.R.id.button1))
+                    .inRoot(androidx.test.espresso.matcher.RootMatchers.isDialog())
+                    .perform(ViewActions.click());
+        }
+
+        assertFalse(new SessionManager(context).isLoggedIn());
+        try (DatabaseHelper database = new DatabaseHelper(context)) {
+            assertEquals(null, database.getUserById(userId));
+            assertNotNull(database.getUserById(otherUserId));
+            assertTrue(database.getJobApplications(userId, null, 0).isEmpty());
+            assertEquals(1, database.getJobApplications(otherUserId, null, 0).size());
+            assertTrue(database.getRemindersForUser(userId, null).isEmpty());
+            assertEquals(otherReminderId,
+                    database.getRemindersForUser(otherUserId, null).get(0).getId());
+        }
+        assertPendingReminderAlarmDoesNotExist(userReminderId);
+    }
+
+    @Test
+    public void settingsReminderPreferencePausesAndRestoresScheduledAlarms() {
+        long userId;
+        long reminderId;
+        java.util.Calendar reminderDate = java.util.Calendar.getInstance();
+        reminderDate.add(java.util.Calendar.DAY_OF_MONTH, 2);
+        reminderDate.set(java.util.Calendar.HOUR_OF_DAY, 0);
+        reminderDate.set(java.util.Calendar.MINUTE, 0);
+        reminderDate.set(java.util.Calendar.SECOND, 0);
+        reminderDate.set(java.util.Calendar.MILLISECOND, 0);
+        long triggerDate = reminderDate.getTimeInMillis();
+        try (DatabaseHelper database = new DatabaseHelper(context)) {
+            userId = database.insertUser(
+                    "Taylor Applicant", "taylor@example.com", "5551234567", "hash");
+            reminderId = database.insertReminder(new Reminder(
+                    0, userId, null, "Future reminder", "", "Other",
+                    triggerDate, "23:59", "Upcoming"));
+        }
+        new SessionManager(context).createSession(userId);
+        Reminder reminder;
+        try (DatabaseHelper database = new DatabaseHelper(context)) {
+            reminder = database.getReminder(reminderId, userId);
+        }
+        ReminderScheduler.schedule(context, reminder);
+        assertPendingReminderAlarmExists(reminderId);
+
+        try (ActivityScenario<SettingsActivity> ignored =
+                     ActivityScenario.launch(SettingsActivity.class)) {
+            Espresso.onView(withId(R.id.switch_reminder_alerts)).perform(ViewActions.click());
+            assertFalse(ReminderPreferences.areReminderAlertsEnabled(context));
+            assertPendingReminderAlarmDoesNotExist(reminderId);
+            Espresso.onView(withId(R.id.switch_reminder_alerts)).perform(ViewActions.click());
+            assertTrue(ReminderPreferences.areReminderAlertsEnabled(context));
+            assertPendingReminderAlarmExists(reminderId);
+        }
+        ReminderScheduler.cancel(context, reminderId);
     }
 
     @Test
@@ -723,13 +899,17 @@ public class ExampleInstrumentedTest {
             String email, String password, String confirmation) {
         ActivityScenario<RegistrationActivity> scenario =
                 ActivityScenario.launch(RegistrationActivity.class);
-        Espresso.onView(withId(R.id.input_full_name))
-                .perform(ViewActions.typeText("Taylor Applicant"));
-        Espresso.onView(withId(R.id.input_email)).perform(ViewActions.typeText(email));
-        Espresso.onView(withId(R.id.input_mobile)).perform(ViewActions.typeText("5551234567"));
-        Espresso.onView(withId(R.id.input_password)).perform(ViewActions.typeText(password));
-        Espresso.onView(withId(R.id.input_confirm_password))
-                .perform(ViewActions.typeText(confirmation), ViewActions.closeSoftKeyboard());
+        scenario.onActivity(activity -> {
+            ((TextInputEditText) activity.findViewById(R.id.input_full_name))
+                    .setText("Taylor Applicant");
+            ((TextInputEditText) activity.findViewById(R.id.input_email)).setText(email);
+            ((TextInputEditText) activity.findViewById(R.id.input_mobile))
+                    .setText("5551234567");
+            ((TextInputEditText) activity.findViewById(R.id.input_password))
+                    .setText(password);
+            ((TextInputEditText) activity.findViewById(R.id.input_confirm_password))
+                    .setText(confirmation);
+        });
         return scenario;
     }
 
@@ -860,5 +1040,24 @@ public class ExampleInstrumentedTest {
             }
         }
         assertEquals(java.util.Arrays.asList(expected), actual);
+    }
+
+    private void assertPendingReminderAlarmExists(long reminderId) {
+        PendingIntent alarm = pendingReminderAlarm(reminderId);
+        assertNotNull(alarm);
+    }
+
+    private void assertPendingReminderAlarmDoesNotExist(long reminderId) {
+        PendingIntent alarm = pendingReminderAlarm(reminderId);
+        assertEquals(null, alarm);
+    }
+
+    private PendingIntent pendingReminderAlarm(long reminderId) {
+        Intent alarmIntent = new Intent(context, ReminderReceiver.class)
+                .setAction(ReminderScheduler.ACTION_REMINDER);
+        int requestCode = (int) (reminderId ^ (reminderId >>> 32));
+        return PendingIntent.getBroadcast(
+                context, requestCode, alarmIntent,
+                PendingIntent.FLAG_NO_CREATE | PendingIntent.FLAG_IMMUTABLE);
     }
 }

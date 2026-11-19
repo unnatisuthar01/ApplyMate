@@ -7,6 +7,7 @@ import android.content.Intent;
 import android.os.Build;
 
 import com.example.applymate.models.Reminder;
+import com.example.applymate.utils.ReminderPreferences;
 
 import java.util.Calendar;
 
@@ -21,6 +22,10 @@ final class ReminderScheduler {
     }
 
     static void schedule(Context context, Reminder reminder) {
+        if (!ReminderPreferences.areReminderAlertsEnabled(context)) {
+            cancel(context, reminder.getId());
+            return;
+        }
         long triggerAt = getTriggerAt(reminder.getDate(), reminder.getTime());
         if (triggerAt <= System.currentTimeMillis()
                 || "Completed".equals(reminder.getStatus())) {
@@ -50,7 +55,10 @@ final class ReminderScheduler {
         AlarmManager alarmManager =
                 (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
         if (alarmManager != null) {
-            alarmManager.cancel(createPendingIntent(context, reminderId, null, null));
+            PendingIntent pendingIntent =
+                    createPendingIntent(context, reminderId, null, null);
+            alarmManager.cancel(pendingIntent);
+            pendingIntent.cancel();
         }
     }
 

@@ -4,7 +4,6 @@ import android.app.Activity;
 import android.content.Intent;
 import android.view.View;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import com.example.applymate.utils.SessionManager;
 
@@ -39,6 +38,9 @@ final class ScreenNavigation {
         statistics.setTextColor(activity.getColor(
                 activity instanceof StatisticsActivity
                         ? R.color.primary_blue : R.color.secondary_text));
+        profile.setTextColor(activity.getColor(
+                activity instanceof ProfileActivity || activity instanceof SettingsActivity
+                        ? R.color.primary_blue : R.color.secondary_text));
         home.setOnClickListener(view -> {
             if (!(activity instanceof MainActivity)) {
                 Intent intent = new Intent(activity, MainActivity.class);
@@ -65,11 +67,15 @@ final class ScreenNavigation {
                 activity.finish();
             }
         });
-        View.OnClickListener placeholderClick = view -> Toast.makeText(
-                activity,
-                activity.getString(R.string.placeholder_coming_soon,
-                        ((TextView) view).getText()),
-                Toast.LENGTH_SHORT).show();
-        profile.setOnClickListener(placeholderClick);
+        profile.setOnClickListener(view -> {
+            if (!(activity instanceof ProfileActivity)) {
+                Intent intent = new Intent(activity, ProfileActivity.class);
+                intent.addFlags(
+                        Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+                activity.startActivity(intent);
+                activity.finish();
+            }
+        });
     }
+
 }

@@ -124,6 +124,7 @@ public class ReminderActivity extends AppCompatActivity {
         try (DatabaseHelper database = new DatabaseHelper(this)) {
             if (database.setReminderStatus(reminder.getId(), userId, "Completed")) {
                 ReminderScheduler.cancel(this, reminder.getId());
+                ReminderNotifications.cancel(this, reminder.getId());
                 loadReminders();
             }
         } catch (SQLiteException exception) {
@@ -139,6 +140,7 @@ public class ReminderActivity extends AppCompatActivity {
                     try (DatabaseHelper database = new DatabaseHelper(this)) {
                         if (database.deleteReminder(reminder.getId(), userId)) {
                             ReminderScheduler.cancel(this, reminder.getId());
+                            ReminderNotifications.cancel(this, reminder.getId());
                             loadReminders();
                         }
                     } catch (SQLiteException exception) {

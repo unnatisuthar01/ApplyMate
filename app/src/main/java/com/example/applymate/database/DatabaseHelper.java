@@ -340,6 +340,44 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         }
     }
 
+    public boolean updateUserProfile(long userId, String name, String email, String mobile) {
+        ContentValues values = new ContentValues();
+        values.put("name", name.trim());
+        values.put("email", normalizeEmail(email));
+        values.put("mobile", mobile.trim());
+        try {
+            return getWritableDatabase().update(
+                    TABLE_USERS, values, "id = ?", new String[]{Long.toString(userId)}) == 1;
+        } catch (SQLiteConstraintException exception) {
+            if (userEmailBelongsToAnotherUser(email, userId)) {
+                return false;
+            }
+            throw exception;
+        }
+    }
+
+    public boolean deleteUserAccount(long userId) {
+        if (userId < 1) {
+            return false;
+        }
+        return getWritableDatabase().delete(
+                TABLE_USERS, "id = ?", new String[]{Long.toString(userId)}) == 1;
+    }
+
+    private boolean userEmailBelongsToAnotherUser(String email, long userId) {
+        try (Cursor cursor = getReadableDatabase().query(
+                TABLE_USERS,
+                new String[]{"id"},
+                "email = ? AND id != ?",
+                new String[]{normalizeEmail(email), Long.toString(userId)},
+                null,
+                null,
+                null,
+                "1")) {
+            return cursor.moveToFirst();
+        }
+    }
+
     private static ContentValues jobValues(JobApplication application) {
         ContentValues values = new ContentValues();
         values.put("company_name", application.getCompanyName());
