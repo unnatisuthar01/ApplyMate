@@ -72,6 +72,11 @@ public class ApplicationPieChartView extends View {
             float sweep = 360f * value / total;
             paint.setColor(colors[index]);
             canvas.drawArc(chartBounds, startAngle, sweep, true, paint);
+            paint.setStyle(Paint.Style.STROKE);
+            paint.setStrokeWidth(1.5f * density);
+            paint.setColor(getResources().getColor(R.color.card_white));
+            canvas.drawArc(chartBounds, startAngle, sweep, false, paint);
+            paint.setStyle(Paint.Style.FILL);
             startAngle += sweep;
         }
         paint.setColor(getResources().getColor(R.color.card_white));
